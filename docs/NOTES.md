@@ -1,60 +1,79 @@
-# re_burp — Burp Suite Pro 2026.11.2 (Build 55152)
+# notes - Burp Suite Desktop 2026.11.2 (Build 55152)
 
-Four byte patches take a stock jar to fully authorized Professional. Jar is
-**unsigned** in this build, so no signature entries need stripping and no
-`SecurityException` risk exists.
+Four byte patches take a stock jar to fully authorized Professional. The jar is
+**unsigned** in this build: no signature entries to strip, no `SecurityException`
+risk, nothing to re-sign.
 
 | # | Target | Offset | Body | Why | Confidence |
 |---|---|---|---|---|---|
-| 1 | `burp/Zhxf.Zr(String)Z` | 0x10e1 | `04 ac` | Signature verifier returns true | confirmed |
-| 2 | `burp/Zn15.Zl(Zhzs,String)Z` | 0x1e2b | `04 ac` | Licence accept/reject returns true | confirmed |
-| 3 | `burp/Zu6.ZG(String,int)Object[]` | — | `Object[]{caption,key,Long,Integer}` + 12 appended CP entries | Bypasses the whole KlassMaster codec chain and hands `Zug1.Zx` a real array so `Zwx`/`Zudh` gets built | confirmed |
-| 4 | `burp/Ztk8.Ze(String)V` | — | `b1` (return) | Manual-activation response validator becomes a no-op | confirmed |
+| 1 | `burp/Zhxf.Zr(String)Z` | 0x10e1 | `04 ac` | signature verifier returns true | confirmed |
+| 2 | `burp/Zn15.Zl(Zhzs,String)Z` | 0x1e2b | `04 ac` | licence accept/reject returns true | confirmed |
+| 3 | `burp/Zu6.ZG(String,int)Object[]` | - | `Object[]{caption, key, Long, Integer}` plus 12 appended CP entries | bypasses the codec chain and hands `Zug1.Zx` a real array | confirmed |
+| 4 | `burp/Ztk8.Ze(String)V` | - | `b1` | manual-activation response validator becomes a no-op | confirmed |
 
 ## The chain
 
-`Zq9j.ZR`/`Zq` → `Zo8.ZI`/`Ze` → `Zldm.ZF` → `Ztk8.ZF` → `Zu6.ZG` → reflective
-KlassMaster dispatch into `Zekc`, which builds a 32-char key from `BigInteger`
-field constants and re-dispatches by reflection. Patch 3 cuts the chain at `ZG`;
-patch 4 removes the response validator that `Ze` runs before it.
+`Zq9j.ZR` / `Zq9j.Zq` -> `Zo8.ZI` / `Zo8.Ze` -> `Zldm.ZF` -> `Ztk8.ZF` ->
+`Zu6.ZG` -> reflective KlassMaster dispatch into `Zekc`, which builds a 32-char
+key from `BigInteger` field constants and re-dispatches by reflection. There is
+no plaintext public key anywhere, so a key swap is not available and a keygen
+has no anchor to sign against.
 
-`Zug1.Zx` is the contract: `Object[]{String caption, String allocationKey, Long
-expiryMillis, Integer flags, [String], [String], [String]}` → `new Zwx(...)`,
-which implements `Zudh`. Everything past index 3 is optional.
+Patch 3 cuts the chain at `ZG`. Patch 4 removes the response validator that
+`Ze` runs in front of it. Patches 1 and 2 are belt and braces: they cover any
+path that still reaches the verifier, including stored-licence revalidation.
 
-## Activation
+## The array contract
 
-1. `java -noverify -jar burpsuite_pro.jar`
-2. Enter any key → Next
-3. Online activation fails (no vendor server for a fake key) → **Manual activation**
-4. **Paste response** → paste any text → Next
-5. Temporary project → Next
+`Zug1.Zx` is the consumer:
 
-Licence persists in Burp's user config; later launches re-validate through
-patches 1–2 and need no input.
+`Object[]{String caption, String allocationKey, Long expiryMillis, Integer
+flags, [String], [String], [String]}` -> `new Zwx(...)`, which implements
+`Zudh`. Everything past index 3 is optional and `null` is fine.
 
-## Gotchas
+## Byte-level gotchas
 
-- `-noverify` is required: patch bodies drop `StackMapTable`, and the split
-  verifier is useless here.
-- Attribute length must be `8 + code_len + 4`, not a constant. Getting this
-  wrong yields `ClassFormatError: Code segment has wrong length`.
-- `ldc2_w` pushes two slots — `max_stack` must account for it (`VerifyError:
-  Operand stack overflow` otherwise).
-- Burp locks the jar: **close it before any `--apply`**. A failed apply leaves
-  `tmp*.jar` behind, which makes `--input .` ambiguous — `rm -f tmp*.jar`.
-- `Zo8.ZI` returning a bare `Zeqh` compiles and verifies but breaks startup: the
-  side effect `Zhkt.ZQ(z)` never runs, so no licence reaches state. That's why
-  patch 3 synthesises the array instead of returning a constant result.
+- `Code` attribute length is `8 + code_len + 4`, never a constant. Hardcoding 14
+  for an 8-byte body gives `ClassFormatError: Code segment has wrong length`.
+- `ldc2_w` pushes two operand-stack slots. `max_stack` must account for the
+  whole peak, not the visible depth.
+- `max_locals` is read at body offset 2 and must be preserved. Reading it at
+  offset 6 returns `max_stack`, which is silently wrong until it isn't.
+- Patch bodies drop `StackMapTable`. That is legal for straight-line code with
+  no branch targets, but it means `-noverify` is mandatory.
+- `Zo8` has a Code attribute whose declared length is 6 bytes short of its own
+  `code_length`. Trusting the declared length desyncs the parser and produces a
+  bogus attribute offset. `patch_burp._skip_member` derives Code length from
+  `code_length` instead of trusting the field.
+
+## Why not the obvious routes
+
+- **Key swap / keygen** - the verifier's public key is assembled at runtime from
+  encrypted fragments; there is no constant to replace.
+- **Bare success type from `Zo8.ZI`** - compiles and verifies, but startup dies
+  silently. `ZI` normally calls `Zhkt.ZQ(z)` inside a `synchronized` block; a
+  bare `Zeqh` skips it, so no licence reaches state and the UI builder NPEs.
+  Synthesising the array at `ZG` keeps every side effect.
+- **Full decompile** - the jar is KlassMaster obfuscated; a round trip loses the
+  vendor's frames for a much larger diff than four methods.
 
 ## Restore
 
-`py patch_licence.py --input burpsuite_pro.jar --restore` (byte-exact, from
-`.orig`). `burpsuite_pro.jar.orig` is the pristine vendor jar — keep it.
+`py patch/patch_licence.py --input burpsuite_pro.jar --restore`
 
-## Updates
+Byte-exact, from `.orig`. Keep `burpsuite_pro.jar.orig` - it is the pristine
+vendor jar and the only thing that makes updates cheap.
 
-New version: drop in the new jar, keep the old `.orig`, update `EXPECT` in
-`reapply.sh`, run `--list` to confirm the class names still exist, then
-`reapply.sh`. Obfuscated names rotate between releases; if a target is missing,
-re-derive it from `Zq9j.ZR` → `Zo8.ZI` as done here.
+## Updating
+
+Class names are obfuscated and rotate every release. On a new version, refresh
+`TARGET_SHA256`, run `--list` on each target, and if one is gone re-derive it by
+following `Zq9j.ZR` -> `Zo8.ZI` -> `Zldm` -> `Ztk8` -> `Zu6`.
+
+## Known limits
+
+- Only the exact pinned build is hash-gated. Other versions will apply, but
+  offsets and names are unverified.
+- Online activation still fails; the manual-activation path is the only one.
+- Pro-only server features that call out (Collaborator, Burp AI credits) are
+  unaffected by these patches and still need real credentials.

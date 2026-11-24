@@ -49,6 +49,9 @@ def main(argv):
         print("  [%s] burp/Zu6.ZG returns Object[4]" % (" ok " if ok else "FAIL"))
         bad += 0 if ok else 1
 
+    vdir = os.path.dirname(os.path.abspath(__file__))
+    if not os.path.isfile(os.path.join(vdir, "Dec.class")):
+        subprocess.run(["javac", "-d", vdir, os.path.join(vdir, "Dec.java")], check=False)
     try:
         r = subprocess.run(["java", "-cp", ".;" + os.path.basename(jar), "Dec", "x", "1"],
                            cwd=os.path.dirname(jar), capture_output=True, text=True, timeout=120)

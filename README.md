@@ -55,11 +55,14 @@ Full offsets, rationale and confidence ratings: [`docs/NOTES.md`](docs/NOTES.md)
 ## Quick start
 
 ```sh
-git clone <this repo> && cd burp-pro-patcher
+git clone https://github.com/nihilist91/burp-pro-patcher && cd burp-pro-patcher
 ./fetch.sh                 # downloads the pinned jar, hash-gated
 ./patch/reapply.sh         # applies all four patches, then verifies
 java -noverify -jar burpsuite_pro.jar
 ```
+
+Or use `launch/burp.bat` (Windows) / `launch/burp.sh` (Linux, macOS), which
+pass the required flags for you.
 
 `reapply.sh` refuses to run without a .orig backup and exits non-zero if any
 verification step fails.
@@ -118,8 +121,8 @@ result with nothing extra to ship.
 **Does it survive reboots?** Yes. The licence lives in user config, and the
 patches live in the jar.
 
-**Can I move it to another PC?** Yes - copy the jar, the `.orig` and `burp.bat`,
-then activate once there. Java 21+ is required.
+**Can I move it to another PC?** Yes - copy the jar, the `.orig` and the `launch/`
+script, then activate once there. Java 21+ is required.
 
 **Will AV flag it?** Possibly. The jar is unsigned and freshly rewritten, which
 trips heuristics. Keep it out of `Downloads` and re-sign with `jarsigner` if a
@@ -138,10 +141,11 @@ Buy a licence if you use Burp commercially.
 
 ## Repo layout
 
-```
-fetch.sh download + hash gate
-versions.env pinned version and SHA-256
-patch/ patchers and reapply.sh
-verify/ independent check + Dec.java
-docs/NOTES.md offsets, technique, confidence
+```text
+fetch.sh              download + hash gate
+versions.env          pinned version and SHA-256
+launch/               burp.bat and burp.sh
+patch/                patchers and reapply.sh
+verify/               independent check + Dec.java
+docs/NOTES.md         offsets, technique, confidence
 ```
