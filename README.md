@@ -59,7 +59,9 @@ git clone <this repo> && cd burp-pro-patcher
 ./fetch.sh                 # downloads the pinned jar, hash-gated
 ./patch/reapply.sh         # applies all four patches, then verifies
 java -noverify -jar burpsuite_pro.jar
-reapply.sh refuses to run without a .orig backup and exits non-zero if any
+```
+
+`reapply.sh` refuses to run without a .orig backup and exits non-zero if any
 verification step fails.
 
 ## Activation
@@ -88,7 +90,10 @@ documented in `docs/NOTES.md`.
 ## Restoring
 
 ```sh
-py patch/patch_licence.py --input burpsuite_pro.jar --restoreByte-exact, from .orig. Keep burpsuite_pro.jar.orig.
+py patch/patch_licence.py --input burpsuite_pro.jar --restore
+```
+
+Byte-exact, from `.orig`. Keep `burpsuite_pro.jar.orig`.
 
 ## Troubleshooting
 
@@ -132,8 +137,11 @@ Buy a licence if you use Burp commercially.
 ---
 
 ## Repo layout
+
+```
 fetch.sh download + hash gate
 versions.env pinned version and SHA-256
 patch/ patchers and reapply.sh
 verify/ independent check + Dec.java
 docs/NOTES.md offsets, technique, confidence
+```
