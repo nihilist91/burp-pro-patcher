@@ -1,0 +1,11 @@
+*.jar
+*.jar.orig
+*.jar.patchstate.json
+*.exe
+__pycache__/
+*.class
+burp.log
+blob.txt
+lic.json
+lic.txt
+ps.p12
